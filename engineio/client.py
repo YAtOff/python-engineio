@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover
 from . import exceptions
 from . import packet
 from . import payload
+from .transport import create_transports
 
 default_logger = logging.getLogger('engineio.client')
 connected_clients = []
@@ -152,18 +153,11 @@ class Client(object):
         """
         if self.state != 'disconnected':
             raise ValueError('Client is not in a disconnected state')
-        valid_transports = ['polling', 'websocket']
-        if transports is not None:
-            if isinstance(transports, six.string_types):
-                transports = [transports]
-            transports = [transport for transport in transports
-                          if transport in valid_transports]
-            if not transports:
-                raise ValueError('No valid transports provided')
-        self.transports = transports or valid_transports
+        self.transports = create_transports(transports, ('polling', 'websocket'))
         self.queue = self.create_queue()
-        return getattr(self, '_connect_' + self.transports[0])(
-            url, headers, engineio_path)
+        transport, transport_options = self.transports[0]
+        return getattr(self, '_connect_' + transport)(
+            url, headers, engineio_path, options=transport_options)
 
     def wait(self):
         """Wait until the connection with the server ends.
@@ -254,7 +248,7 @@ class Client(object):
         self.state = 'disconnected'
         self.sid = None
 
-    def _connect_polling(self, url, headers, engineio_path):
+    def _connect_polling(self, url, headers, engineio_path, options=None):
         """Establish a long-polling connection to the Engine.IO server."""
         if requests is None:  # pragma: no cover
             # not installed
@@ -310,7 +304,7 @@ class Client(object):
         self.read_loop_task = self.start_background_task(
             self._read_loop_polling)
 
-    def _connect_websocket(self, url, headers, engineio_path):
+    def _connect_websocket(self, url, headers, engineio_path, options=None):
         """Establish or upgrade to a WebSocket connection with the server."""
         if websocket is None:  # pragma: no cover
             # not installed
@@ -338,7 +332,7 @@ class Client(object):
         try:
             ws = websocket.create_connection(
                 websocket_url + self._get_url_timestamp(), header=headers,
-                cookie=cookies)
+                cookie=cookies, **(options or {}))
         except ConnectionError:
             if upgrade:
                 self.logger.warning(

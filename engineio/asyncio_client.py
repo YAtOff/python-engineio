@@ -14,6 +14,7 @@ from . import client
 from . import exceptions
 from . import packet
 from . import payload
+from .transport import create_transports
 
 
 class AsyncClient(client.Client):
@@ -59,18 +60,11 @@ class AsyncClient(client.Client):
         """
         if self.state != 'disconnected':
             raise ValueError('Client is not in a disconnected state')
-        valid_transports = ['polling', 'websocket']
-        if transports is not None:
-            if isinstance(transports, six.text_type):
-                transports = [transports]
-            transports = [transport for transport in transports
-                          if transport in valid_transports]
-            if not transports:
-                raise ValueError('No valid transports provided')
-        self.transports = transports or valid_transports
+        self.transports = create_transports(transports, ('polling', 'websocket'))
         self.queue = self.create_queue()
-        return await getattr(self, '_connect_' + self.transports[0])(
-            url, headers, engineio_path)
+        transport, transport_options = self.transports[0]
+        return await getattr(self, '_connect_' + transports)(
+            url, headers, engineio_path, options=transport_options)
 
     async def wait(self):
         """Wait until the connection with the server ends.
@@ -163,7 +157,7 @@ class AsyncClient(client.Client):
             asyncio.ensure_future(self.http.close())
         super()._reset()
 
-    async def _connect_polling(self, url, headers, engineio_path):
+    async def _connect_polling(self, url, headers, engineio_path, options=None):
         """Establish a long-polling connection to the Engine.IO server."""
         if aiohttp is None:  # pragma: no cover
             self.logger.error('aiohttp not installed -- cannot make HTTP '
@@ -217,7 +211,7 @@ class AsyncClient(client.Client):
         self.read_loop_task = self.start_background_task(
             self._read_loop_polling)
 
-    async def _connect_websocket(self, url, headers, engineio_path):
+    async def _connect_websocket(self, url, headers, engineio_path, options=None):
         """Establish or upgrade to a WebSocket connection with the server."""
         if websockets is None:  # pragma: no cover
             self.logger.error('websockets package not installed')
@@ -247,7 +241,7 @@ class AsyncClient(client.Client):
         try:
             ws = await websockets.connect(
                 websocket_url + self._get_url_timestamp(),
-                extra_headers=headers)
+                extra_headers=headers, **(options or {}))
         except (websockets.exceptions.InvalidURI,
                 websockets.exceptions.InvalidHandshake):
             if upgrade:
