@@ -333,7 +333,7 @@ class Client(object):
             ws = websocket.create_connection(
                 websocket_url + self._get_url_timestamp(), header=headers,
                 cookie=cookies, **(options or {}))
-        except ConnectionError:
+        except websocket.WebSocketException:
             if upgrade:
                 self.logger.warning(
                     'WebSocket upgrade failed: connection error')
