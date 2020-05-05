@@ -63,7 +63,7 @@ class AsyncClient(client.Client):
         self.transports = create_transports(transports, ('polling', 'websocket'))
         self.queue = self.create_queue()
         transport, transport_options = self.transports[0]
-        return await getattr(self, '_connect_' + transports)(
+        return await getattr(self, '_connect_' + transport)(
             url, headers, engineio_path, options=transport_options)
 
     async def wait(self):
